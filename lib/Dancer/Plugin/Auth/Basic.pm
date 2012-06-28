@@ -15,32 +15,25 @@ use Dancer::Response;
 use HTTP::Headers;
 use MIME::Base64;
 
-our $VERSION = '0.012';
+our $VERSION = '0.013';
 
 my $settings = plugin_setting;
 
 # Protected paths defined in the configuration
-my $paths = {};
+my $paths = exists $settings->{paths} ? $settings->{paths} : {};
 # "Global" users
-my $users = {};
-
-if (exists $settings->{paths}) {
-    $paths = $settings->{paths};
-}
-
-if (exists $settings->{users}) {
-    $users = $settings->{users};
-}
+my $users = exists $settings->{users} ? $settings->{users} : {};
 
 sub _auth_basic {
     my (%options) = @_;
-    
+
     # Get authentication data from request
     my $auth = request->env->{HTTP_AUTHORIZATION};
     
     if (defined $auth && $auth =~ /^Basic (.*)$/) {
         my ($user, $password) = split(/:/, (MIME::Base64::decode($1) || ":"));
-        
+        $password = '' unless defined $password;
+            
         if (exists $options{user}) {
             # A single user is defined
             if ($user eq $options{user} && $password eq $options{password}) {
@@ -50,14 +43,14 @@ sub _auth_basic {
         }
         elsif (exists $options{users}) {
             # Multiple users are defined
-            if ($password eq $options{users}->{$user}) {
+            if (exists $options{users}->{$user} && $password eq $options{users}->{$user}) {
                 # Authorization succeeded
                 return 1;
             }
         }
         elsif (defined $users) {
             # Use the "global" users list
-            if ($password eq $users->{$user}) {
+            if (exists $users->{$user} && $password eq $users->{$user}) {
                 # Authorization succeeded
                 return 1;
             }
@@ -71,13 +64,12 @@ sub _auth_basic {
     my $content = "Authorization required";
     
     return halt(Dancer::Response->new(
-        status => 401,
+        status  => 401,
         content => $content,
         headers => [
-            'Content-Type' => 'text/plain',
-            'Content-Length' => length($content),
-            'WWW-Authenticate' => 'Basic realm="' . ($options{realm} ||
-                "Restricted area") . '"'
+            'Content-Type'     => 'text/plain',
+            'Content-Length'   => length($content),
+            'WWW-Authenticate' => 'Basic realm="'.($options{realm} || "Restricted area").'"'
         ]
     ));
 }
